@@ -51,8 +51,8 @@ async def get_binance_live_feed(symbol: str):
         else:
             return {"message": f"Binance data not available for {symbol}"}
 
-@app.get("/coinbase-live-feed/{symbol}")
-async def get_coinbase_live_feed(symbol: str):
+@app.get("/coinbase-orderbook/{symbol}")
+async def get_coinbase_orderbook(symbol: str):
     data = await coinbase_exchange.get_order_book(symbol)
     return data
 
