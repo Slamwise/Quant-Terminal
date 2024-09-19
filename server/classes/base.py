@@ -60,3 +60,12 @@ class Model(ABC):
     @abstractmethod
     def predict(self, data):
         pass
+
+class ExchangeAPI(ABC):
+    @abstractmethod
+    async def get_order_book(self):
+        pass
+
+    @abstractmethod
+    async def get_trades(self):
+        pass
