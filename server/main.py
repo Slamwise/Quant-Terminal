@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 import asyncio
 from classes.data_sources.stocks import YFinanceDataSource
 from classes.data_sources.crypto import BinanceAPI, CoinbaseWebSocketAPI
@@ -16,8 +16,7 @@ binance_data_lock = asyncio.Lock()
 
 # Initialize Coinbase WebSocket API
 coinbase_exchange = CoinbaseWebSocketAPI()
-# TODO: Figure out how to dynamically set the coinbase symbols and channels from requests
-coinbase_symbols = ['BTC-USD', 'ETH-USD']
+coinbase_symbols = set()  # Use a set to store unique symbols
 coinbase_channels = ["ticker_batch"] 
 
 async def fetch_binance_data_continuously(symbols=['BTCUSDT', 'ETHUSDT'], interval=5):
@@ -36,7 +35,7 @@ async def fetch_binance_data_continuously(symbols=['BTCUSDT', 'ETHUSDT'], interv
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    await coinbase_exchange.connect(coinbase_symbols, coinbase_channels)
+    await coinbase_exchange.connect(list(coinbase_symbols), coinbase_channels)
     asyncio.create_task(coinbase_exchange.listen())
     yield
     # Shutdown logic (if any)
@@ -59,7 +58,21 @@ async def get_coinbase_live_feed(symbol: str):
 
 @app.get("/coinbase-ticker/{symbol}")
 async def get_coinbase_ticker(symbol: str):
+    symbol = symbol.upper()  # Ensure the symbol is in uppercase
+    if symbol not in coinbase_symbols:
+        coinbase_symbols.add(symbol)
+        try:
+            await coinbase_exchange.subscribe([symbol], coinbase_channels)
+        except Exception as e:
+            coinbase_symbols.remove(symbol)
+            raise HTTPException(status_code=400, detail=f"Failed to subscribe to {symbol}: {str(e)}")
+    
+    # Wait for a short time to allow the subscription to take effect
+    await asyncio.sleep(1)
+    
     data = await coinbase_exchange.get_ticker(symbol)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"No data available for {symbol}")
     return data
 
 # Create an instance of YFinanceDataSource

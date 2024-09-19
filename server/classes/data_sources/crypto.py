@@ -67,18 +67,36 @@ class CoinbaseWebSocketAPI(ExchangeAPI):
         self.latest_tickers = {}
         self.lock = asyncio.Lock()
         self.subscribed_channels = set()
+        self.subscribed_symbols = set()
 
-    async def connect(self, symbols=['BTC-USD', 'ETH-USD'], channels=None):
+    async def connect(self, symbols=None, channels=None):
         self.websocket = await websockets.connect(self.WS_URL)
         if channels is None:
             channels = ["level2", "ticker_batch"]
         self.subscribed_channels = set(channels)
+        if symbols:
+            self.subscribed_symbols = set(symbols)
+        await self._send_subscribe_message()
+
+    async def _send_subscribe_message(self):
         subscribe_message = {
             "type": "subscribe",
-            "product_ids": symbols,
+            "product_ids": list(self.subscribed_symbols),
             "channels": list(self.subscribed_channels)
         }
         await self.websocket.send(json.dumps(subscribe_message))
+
+    async def subscribe(self, symbols, channels=None):
+        new_symbols = set(symbols) - self.subscribed_symbols
+        if new_symbols:
+            self.subscribed_symbols.update(new_symbols)
+            if channels:
+                self.subscribed_channels.update(channels)
+            await self._send_subscribe_message()
+
+    async def disconnect(self):
+        if self.websocket:
+            await self.websocket.close()
 
     async def listen(self):
         while True:
@@ -92,6 +110,10 @@ class CoinbaseWebSocketAPI(ExchangeAPI):
                     await self.update_order_book(data)
                 elif data['type'] == 'ticker' and 'ticker_batch' in self.subscribed_channels:
                     await self.update_ticker(data)
+            except websockets.exceptions.ConnectionClosed:
+                logging.error("WebSocket connection closed. Attempting to reconnect...")
+                await asyncio.sleep(5)
+                await self.connect()
             except Exception as e:
                 logging.error(f"WebSocket error: {e}")
                 await asyncio.sleep(5)
