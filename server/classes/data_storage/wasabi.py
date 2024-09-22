@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
-def save_json_to_wasabi(json_data, bucket_name, object_key):
+def save_json_to_wasabi(json_data, bucket_name, object_key, print_success=True):
     """
     Connect to Wasabi and save a JSON block to a specified bucket.
     
@@ -40,11 +40,12 @@ def save_json_to_wasabi(json_data, bucket_name, object_key):
             Body=json_string,
             ContentType='application/json'
         )
-        print(f"Successfully saved JSON to {bucket_name}/{object_key}")
+        if print_success:
+            print(f"Successfully saved JSON to {bucket_name}/{object_key}")
     except Exception as e:
         print(f"Error saving JSON to Wasabi: {str(e)}")
 
-def test_wasabi_connection_and_list_buckets():
+def test_wasabi_connection_and_list_buckets(print_success=True):
     """
     Test the connection to Wasabi and list available buckets.
     
@@ -68,8 +69,9 @@ def test_wasabi_connection_and_list_buckets():
         # Attempt to list buckets
         response = s3_client.list_buckets()
         buckets = [bucket['Name'] for bucket in response['Buckets']]
-        print("Successfully connected to Wasabi.")
-        print(f"Available buckets: {', '.join(buckets)}")
+        if print_success:
+            print("Successfully connected to Wasabi.")
+            print(f"Available buckets: {', '.join(buckets)}")
         return buckets
     except ClientError as e:
         print(f"Failed to connect to Wasabi: {e}")

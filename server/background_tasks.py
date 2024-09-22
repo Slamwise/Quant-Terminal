@@ -15,11 +15,11 @@ async def save_order_book_to_wasabi(symbol, data):
     object_key = f"binance/orderbook/{symbol}/{timestamp}.json"
     
     # Initialize Wasabi connection
-    wasabi_buckets = test_wasabi_connection_and_list_buckets()
+    wasabi_buckets = test_wasabi_connection_and_list_buckets(print_success=False)
     if not wasabi_buckets:
         raise Exception("Failed to connect to Wasabi or no buckets available")
     WASABI_BUCKET = wasabi_buckets[0]  # Use the first available bucket
-    await asyncio.to_thread(save_json_to_wasabi, data, WASABI_BUCKET, object_key)
+    await asyncio.to_thread(save_json_to_wasabi, data, WASABI_BUCKET, object_key, print_success=False)
 
 async def listen_order_book_with_retry(symbol):
     retries = 0
