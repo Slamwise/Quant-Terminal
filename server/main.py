@@ -1,9 +1,14 @@
 from fastapi import FastAPI, HTTPException
 import asyncio
-from classes.data_sources.stocks import YFinanceDataSource
-from classes.data_sources.crypto import BinanceAPI, CoinbaseWebSocketAPI
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
+from classes.data_sources.stocks import YFinanceDataSource
+from classes.data_sources.binance import BinanceAPI
+from classes.data_sources.coinbase import CoinbaseWebSocketAPI
+from classes.data_storage.wasabi import save_json_to_wasabi, test_wasabi_connection_and_list_buckets
+from background_tasks import run_background_tasks
 
 app = FastAPI()
 logging.basicConfig(level=logging.DEBUG)
@@ -17,7 +22,13 @@ binance_data_lock = asyncio.Lock()
 # Initialize Coinbase WebSocket API
 coinbase_exchange = CoinbaseWebSocketAPI()
 coinbase_symbols = set()  # Use a set to store unique symbols
-coinbase_channels = ["ticker_batch"] 
+coinbase_channels = ["ticker_batch"]
+
+# Initialize Wasabi connection
+wasabi_buckets = test_wasabi_connection_and_list_buckets()
+if not wasabi_buckets:
+    raise Exception("Failed to connect to Wasabi or no buckets available")
+WASABI_BUCKET = wasabi_buckets[0]  # Use the first available bucket
 
 async def fetch_binance_data_continuously(symbols=['BTCUSDT', 'ETHUSDT'], interval=5):
     global binance_latest_order_books
@@ -37,10 +48,25 @@ async def lifespan(app: FastAPI):
     # Startup logic
     await coinbase_exchange.connect(list(coinbase_symbols), coinbase_channels)
     asyncio.create_task(coinbase_exchange.listen())
+    asyncio.create_task(save_coinbase_data_continuously())
+    run_background_tasks()  # Start Binance order book stream
     yield
     # Shutdown logic (if any)
 
 app = FastAPI(lifespan=lifespan)
+
+async def save_coinbase_data_to_wasabi(symbol, data):
+    timestamp = datetime.now(timezone.utc).isoformat()
+    object_key = f"coinbase/{symbol}/{timestamp}.json"
+    await asyncio.to_thread(save_json_to_wasabi, data, WASABI_BUCKET, object_key)
+
+async def save_coinbase_data_continuously():
+    while True:
+        for symbol in coinbase_symbols:
+            data = await coinbase_exchange.get_ticker(symbol)
+            if data:
+                await save_coinbase_data_to_wasabi(symbol, data)
+        await asyncio.sleep(60)  # Save data every 60 seconds
 
 @app.get("/binance-live-feed/{symbol}")
 async def get_binance_live_feed(symbol: str):
@@ -73,6 +99,10 @@ async def get_coinbase_ticker(symbol: str):
     data = await coinbase_exchange.get_ticker(symbol)
     if data is None:
         raise HTTPException(status_code=404, detail=f"No data available for {symbol}")
+    
+    # Save the data to Wasabi
+    await save_coinbase_data_to_wasabi(symbol, data)
+    
     return data
 
 # Create an instance of YFinanceDataSource
