@@ -1,46 +1,49 @@
+# background_tasks.py
+
 import asyncio
 import logging
 from classes.data_sources.binance import BinanceAPI
 from classes.data_storage.wasabi import test_wasabi_connection_and_list_buckets, save_json_to_wasabi
 from datetime import datetime, timezone
 
-binance_exchange = BinanceAPI()
+binance_api = BinanceAPI()
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
-RETRY_DELAY = 5  # seconds
+# Initialize Wasabi connection and select the bucket once
+wasabi_buckets = test_wasabi_connection_and_list_buckets(print_success=False)
+if not wasabi_buckets:
+    raise Exception("Failed to connect to Wasabi or no buckets available")
+WASABI_BUCKET = wasabi_buckets[0]  # Use the first available bucket
 
-async def save_order_book_to_wasabi(symbol, data):
+async def save_data_to_wasabi(symbol, order_book, ohlcv):
     timestamp = datetime.now(timezone.utc).isoformat()
-    object_key = f"binance/orderbook/{symbol}/{timestamp}.json"
-    
-    # Initialize Wasabi connection
-    wasabi_buckets = test_wasabi_connection_and_list_buckets(print_success=False)
-    if not wasabi_buckets:
-        raise Exception("Failed to connect to Wasabi or no buckets available")
-    WASABI_BUCKET = wasabi_buckets[0]  # Use the first available bucket
-    await asyncio.to_thread(save_json_to_wasabi, data, WASABI_BUCKET, object_key, print_success=False)
+    data = {
+        'timestamp': timestamp,
+        'symbol': symbol,
+        'order_book': order_book,
+        'ohlcv': ohlcv
+    }
+    object_key = f"data/{symbol}/{timestamp}.json"
+    # Save to Wasabi (assuming save_json_to_wasabi is your utility function)
+    await asyncio.to_thread(save_json_to_wasabi, data, WASABI_BUCKET, object_key)
 
-async def listen_order_book_with_retry(symbol):
-    retries = 0
-    while retries < MAX_RETRIES:
-        try:
-            await binance_exchange.listen_order_book(symbol, save_order_book_to_wasabi)
-        except Exception as e:
-            retries += 1
-            logger.error(f"Error in Binance order book stream for {symbol}. Retry {retries}/{MAX_RETRIES}. Error: {str(e)}")
-            if retries < MAX_RETRIES:
-                await asyncio.sleep(RETRY_DELAY)
-            else:
-                logger.critical(f"Binance order book stream for {symbol} failed after {MAX_RETRIES} attempts. Stopping this stream.")
-                return
-        else:
-            retries = 0  # Reset retries if successful
+async def fetch_and_save_data(symbol):
+    try:
+        order_book = await binance_api.fetch_order_book(symbol)
+        ohlcv = await binance_api.fetch_ohlcv(symbol)
+        await save_data_to_wasabi(symbol, order_book, ohlcv)
+        logger.info(f"Data for {symbol} saved successfully.")
+    except Exception as e:
+        logger.error(f"Error fetching or saving data for {symbol}: {str(e)}")
 
-async def start_binance_order_book_stream(symbols=['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'SEIUSDT', 'SUIUSDT', 'PEPEUSDT']):
-    tasks = [listen_order_book_with_retry(symbol) for symbol in symbols]
-    await asyncio.gather(*tasks)
+async def scheduled_data_collection(symbols):
+    while True:
+        tasks = [fetch_and_save_data(symbol) for symbol in symbols]
+        await asyncio.gather(*tasks)
+        await asyncio.sleep(60)  # Sleep for 1 minute
 
 def run_background_tasks():
+    symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'SEIUSDT', 'SUIUSDT', 'PEPEUSDT']
     loop = asyncio.get_event_loop()
-    loop.create_task(start_binance_order_book_stream())
+    loop.create_task(scheduled_data_collection(symbols))
+    loop.run_forever()
