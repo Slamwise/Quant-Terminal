@@ -44,6 +44,5 @@ async def scheduled_data_collection(symbols):
 
 def run_background_tasks():
     symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'SEIUSDT', 'SUIUSDT', 'PEPEUSDT']
-    loop = asyncio.get_event_loop()
-    loop.create_task(scheduled_data_collection(symbols))
-    loop.run_forever()
+    task = asyncio.create_task(scheduled_data_collection(symbols))
+    return task

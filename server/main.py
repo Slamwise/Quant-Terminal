@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    run_background_tasks()  # Start Binance order book stream
+    background_task = run_background_tasks() # Start Binance order book stream
     yield
-    # Shutdown logic (if any)
+    # Shutdown logic
+    background_task.cancel()
 
 app = FastAPI(lifespan=lifespan)
 
