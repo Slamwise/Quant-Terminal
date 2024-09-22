@@ -4,9 +4,16 @@ from classes.base import ExchangeAPI
 
 class BinanceAPI(ExchangeAPI):
     BASE_URL = 'https://api.binance.com'
-    WS_URL = 'wss://fstream.binance.com/stream'
+    WS_URL = 'wss://stream.binance.com:9443/ws'
 
-    # Websocket orderboo
+    async def get_order_book(self, symbol='BTCUSDT', limit=100):
+        endpoint = '/api/v3/depth'
+        params = {'symbol': symbol, 'limit': limit}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{self.BASE_URL}{endpoint}", params=params) as resp:
+                data = await resp.json()
+                return data
+
     async def listen_order_book(self, symbol='BTCUSDT', callback=None):
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(f"{self.WS_URL}/{symbol.lower()}@depth") as ws:
