@@ -37,7 +37,7 @@ async def listen_order_book_with_retry(symbol):
         else:
             retries = 0  # Reset retries if successful
 
-async def start_binance_order_book_stream(symbols=['BTCUSDT', 'ETHUSDT']):
+async def start_binance_order_book_stream(symbols=['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'SEIUSDT', 'SUIUSDT', 'PEPEUSDT']):
     tasks = [listen_order_book_with_retry(symbol) for symbol in symbols]
     await asyncio.gather(*tasks)
 
