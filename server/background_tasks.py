@@ -15,7 +15,7 @@ if not wasabi_buckets:
     raise Exception("Failed to connect to Wasabi or no buckets available")
 WASABI_BUCKET = wasabi_buckets[0]  # Use the first available bucket
 
-async def save_data_to_wasabi(symbol, order_book, ohlcv):
+async def save_data_to_wasabi(exchange, symbol, order_book, ohlcv):
     timestamp = datetime.now(timezone.utc).isoformat()
     data = {
         'timestamp': timestamp,
@@ -23,7 +23,7 @@ async def save_data_to_wasabi(symbol, order_book, ohlcv):
         'order_book': order_book,
         'ohlcv': ohlcv
     }
-    object_key = f"data/{symbol}/{timestamp}.json"
+    object_key = f"{exchange}/{symbol}/{timestamp}.json"
     # Save to Wasabi (assuming save_json_to_wasabi is your utility function)
     await asyncio.to_thread(save_json_to_wasabi, data, WASABI_BUCKET, object_key)
 
@@ -31,7 +31,7 @@ async def fetch_and_save_data(symbol):
     try:
         order_book = await binance_api.fetch_order_book(symbol)
         ohlcv = await binance_api.fetch_ohlcv(symbol)
-        await save_data_to_wasabi(symbol, order_book, ohlcv)
+        await save_data_to_wasabi('binance', symbol, order_book, ohlcv)
         logger.info(f"Data for {symbol} saved successfully.")
     except Exception as e:
         logger.error(f"Error fetching or saving data for {symbol}: {str(e)}")

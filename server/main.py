@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from background_tasks import run_background_tasks
 
 app = FastAPI()
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
